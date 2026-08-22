@@ -233,5 +233,125 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(validate(root), [])
 
 
+class DateValueValidationTests(unittest.TestCase):
+    def event(self, dtstart_line):
+        return (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            f"{dtstart_line}\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+
+    def test_valid_datetime_with_z_is_accepted(self):
+        root = parse_document(self.event("DTSTART:20260102T090000Z"))
+        self.assertEqual(validate(root), [])
+
+    def test_valid_datetime_without_z_is_accepted(self):
+        root = parse_document(self.event("DTSTART:20260102T090000"))
+        self.assertEqual(validate(root), [])
+
+    def test_valid_date_with_value_param_is_accepted(self):
+        root = parse_document(self.event("DTSTART;VALUE=DATE:20260102"))
+        self.assertEqual(validate(root), [])
+
+    def test_malformed_datetime_is_reported(self):
+        root = parse_document(self.event("DTSTART:2026-01-02T09:00:00"))
+        errors = validate(root)
+        self.assertTrue(any("DTSTART" in e.message and "DATE-TIME" in e.message for e in errors))
+
+    def test_invalid_calendar_date_is_reported(self):
+        # 2026 is not a leap year, so February only has 28 days.
+        root = parse_document(self.event("DTSTART;VALUE=DATE:20260229"))
+        errors = validate(root)
+        self.assertTrue(any("DTSTART" in e.message and "DATE" in e.message for e in errors))
+
+    def test_out_of_range_time_is_reported(self):
+        root = parse_document(self.event("DTSTART:20260102T250000Z"))
+        errors = validate(root)
+        self.assertTrue(any("DTSTART" in e.message for e in errors))
+
+    def test_value_date_on_dtstart_reports_position_of_value(self):
+        text = self.event("DTSTART;VALUE=DATE:20260230")
+        root = parse_document(text)
+        errors = validate(root)
+        err = next(e for e in errors if "DTSTART" in e.message)
+        self.assertEqual(err.pos, Pos(7, 20))
+
+    def test_value_period_is_not_checked_on_rdate(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+            "RDATE;VALUE=PERIOD:20260102T090000Z/PT1H\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        self.assertEqual(validate(root), [])
+
+    def test_invalid_value_param_on_dtstart_is_reported(self):
+        root = parse_document(self.event("DTSTART;VALUE=PERIOD:20260102T090000Z/PT1H"))
+        errors = validate(root)
+        self.assertTrue(any("VALUE=PERIOD" in e.message for e in errors))
+
+    def test_dtstamp_missing_utc_z_is_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000\n"
+            "DTSTART:20260102T090000Z\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        self.assertTrue(any("DTSTAMP" in e.message and "UTC" in e.message for e in errors))
+
+    def test_dtstamp_with_value_date_is_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP;VALUE=DATE:20260101\n"
+            "DTSTART:20260102T090000Z\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        self.assertTrue(any("DTSTAMP" in e.message and "not allowed" in e.message for e in errors))
+
+    def test_exdate_checks_each_comma_separated_value(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+            "EXDATE:20260103T090000Z,not-a-date\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        self.assertTrue(any("EXDATE" in e.message and "not-a-date" in e.message for e in errors))
+
+
 if __name__ == "__main__":
     unittest.main()

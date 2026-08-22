@@ -68,9 +68,16 @@ has a colon somewhere, and points at the exact spot where it expected one.
 - Exactly one top-level `BEGIN:VCALENDAR` block.
 - Required properties: `VERSION` and `PRODID` on `VCALENDAR`, `UID`,
   `DTSTAMP`, and `DTSTART` on every `VEVENT`.
+- `DATE`/`DATE-TIME` value formats: `DTSTART`, `DTEND`, `DUE`,
+  `RECURRENCE-ID`, and `EXDATE` are checked against their `VALUE` parameter
+  (`DATE` or `DATE-TIME`, defaulting to `DATE-TIME`), including that the
+  calendar date itself is real (no Feb 30, no leap days in non-leap years).
+  `DTSTAMP`, `CREATED`, and `LAST-MODIFIED` are checked as UTC `DATE-TIME`
+  values, since RFC 5545 doesn't let those vary. `EXDATE` and `RDATE`
+  values are checked item-by-item when comma-separated.
 
-Value-level checks (date formats, `RRULE` syntax, timezone references) are
-not implemented yet -- see the roadmap below.
+`RRULE` syntax and timezone reference checks are not implemented yet -- see
+the roadmap below.
 
 ## Why no dependencies
 
