@@ -341,6 +341,87 @@ def _check_date_value_property(prop, errors):
         offset += len(item) + 1  # skip over the item and its trailing comma
 
 
+# RFC 5545 3.3.10: the recurrence rule parts recognized by RRULE/EXRULE.
+RRULE_PART_NAMES = {
+    "FREQ", "UNTIL", "COUNT", "INTERVAL", "BYSECOND", "BYMINUTE", "BYHOUR",
+    "BYDAY", "BYMONTHDAY", "BYYEARDAY", "BYWEEKNO", "BYMONTH", "BYSETPOS", "WKST",
+}
+
+RRULE_FREQS = {"SECONDLY", "MINUTELY", "HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"}
+
+
+def _is_positive_int_str(s):
+    return re.fullmatch(r"[1-9][0-9]*", s) is not None
+
+
+def _check_rrule_property(prop, errors):
+    """Check an RRULE value against RFC 5545 3.3.10: FREQ is required and
+    must be a known frequency, UNTIL and COUNT are mutually exclusive, COUNT
+    and INTERVAL must be positive integers, and UNTIL must be a valid DATE
+    or UTC DATE-TIME."""
+    if prop.name.upper() != "RRULE":
+        return
+
+    if not prop.value:
+        errors.append(IcsError("RRULE must not be empty", prop.pos))
+        return
+
+    seen = set()
+    until_part = None
+    count_seen = False
+    offset = 0
+    for part in prop.value.split(";"):
+        part_pos = position_at(prop.value_positions, offset)
+        if "=" not in part:
+            errors.append(IcsError(f"RRULE part {part!r} is missing '='", part_pos))
+            offset += len(part) + 1
+            continue
+        pname, _, pvalue = part.partition("=")
+        upper_pname = pname.upper()
+        value_pos = position_at(prop.value_positions, offset + len(pname) + 1)
+
+        if upper_pname in seen:
+            errors.append(IcsError(f"RRULE part {upper_pname} is repeated", part_pos))
+        elif upper_pname not in RRULE_PART_NAMES and not upper_pname.startswith("X-"):
+            errors.append(IcsError(f"RRULE part name {pname!r} is not recognized", part_pos))
+        seen.add(upper_pname)
+
+        if upper_pname == "FREQ" and pvalue.upper() not in RRULE_FREQS:
+            errors.append(IcsError(f"RRULE FREQ={pvalue} is not a recognized frequency", value_pos))
+        elif upper_pname == "UNTIL":
+            until_part = (pvalue, value_pos)
+        elif upper_pname == "COUNT":
+            count_seen = True
+            if not _is_positive_int_str(pvalue):
+                errors.append(IcsError(f"RRULE COUNT={pvalue!r} must be a positive integer", value_pos))
+        elif upper_pname == "INTERVAL" and not _is_positive_int_str(pvalue):
+            errors.append(IcsError(f"RRULE INTERVAL={pvalue!r} must be a positive integer", value_pos))
+
+        offset += len(part) + 1
+
+    if "FREQ" not in seen:
+        errors.append(IcsError("RRULE is missing the required FREQ part", prop.pos))
+
+    if until_part is not None:
+        until_value, until_pos = until_part
+        if count_seen:
+            errors.append(IcsError("RRULE must not have both UNTIL and COUNT", until_pos))
+        is_date = _is_valid_date_str(until_value)
+        is_date_time = _is_valid_date_time_str(until_value)
+        if not is_date and not is_date_time:
+            errors.append(
+                IcsError(f"RRULE UNTIL value {until_value!r} is not a valid DATE or DATE-TIME", until_pos)
+            )
+        elif is_date_time and not until_value.endswith("Z"):
+            errors.append(
+                IcsError(
+                    "RRULE UNTIL must be specified in UTC time (missing trailing 'Z') "
+                    "when using a DATE-TIME value",
+                    until_pos,
+                )
+            )
+
+
 def validate(root):
     """Check the structural rules a calendar file must follow beyond bare
     syntax. Returns a list of IcsError rather than raising, so a caller can
@@ -377,5 +458,6 @@ def validate(root):
 
     for prop in _iter_properties(vcalendar):
         _check_date_value_property(prop, errors)
+        _check_rrule_property(prop, errors)
 
     return errors

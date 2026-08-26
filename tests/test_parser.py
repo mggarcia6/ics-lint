@@ -353,5 +353,99 @@ class DateValueValidationTests(unittest.TestCase):
         self.assertTrue(any("EXDATE" in e.message and "not-a-date" in e.message for e in errors))
 
 
+class RRuleValidationTests(unittest.TestCase):
+    def event(self, rrule_line):
+        return (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+            f"{rrule_line}\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+
+    def test_simple_daily_rule_is_accepted(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;COUNT=5"))
+        self.assertEqual(validate(root), [])
+
+    def test_rule_with_until_is_accepted(self):
+        root = parse_document(self.event("RRULE:FREQ=WEEKLY;UNTIL=20260301T090000Z"))
+        self.assertEqual(validate(root), [])
+
+    def test_rule_with_interval_and_byday_is_accepted(self):
+        root = parse_document(self.event("RRULE:FREQ=MONTHLY;INTERVAL=2;BYDAY=MO,WE"))
+        self.assertEqual(validate(root), [])
+
+    def test_missing_freq_is_reported(self):
+        root = parse_document(self.event("RRULE:COUNT=5"))
+        errors = validate(root)
+        self.assertTrue(any("FREQ" in e.message for e in errors))
+
+    def test_unrecognized_freq_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=FORTNIGHTLY"))
+        errors = validate(root)
+        self.assertTrue(any("FREQ=FORTNIGHTLY" in e.message for e in errors))
+
+    def test_until_and_count_together_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;UNTIL=20260301T090000Z;COUNT=5"))
+        errors = validate(root)
+        self.assertTrue(any("UNTIL and COUNT" in e.message for e in errors))
+
+    def test_non_integer_count_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;COUNT=abc"))
+        errors = validate(root)
+        self.assertTrue(any("COUNT" in e.message for e in errors))
+
+    def test_zero_interval_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;INTERVAL=0"))
+        errors = validate(root)
+        self.assertTrue(any("INTERVAL" in e.message for e in errors))
+
+    def test_malformed_until_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;UNTIL=not-a-date"))
+        errors = validate(root)
+        self.assertTrue(any("UNTIL" in e.message and "not a valid" in e.message for e in errors))
+
+    def test_until_datetime_without_z_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;UNTIL=20260301T090000"))
+        errors = validate(root)
+        self.assertTrue(any("UNTIL" in e.message and "UTC" in e.message for e in errors))
+
+    def test_until_date_without_time_is_accepted(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;UNTIL=20260301"))
+        self.assertEqual(validate(root), [])
+
+    def test_unrecognized_part_name_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;BYFOO=1"))
+        errors = validate(root)
+        self.assertTrue(any("BYFOO" in e.message for e in errors))
+
+    def test_repeated_part_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;FREQ=WEEKLY"))
+        errors = validate(root)
+        self.assertTrue(any("repeated" in e.message for e in errors))
+
+    def test_part_missing_equals_is_reported(self):
+        root = parse_document(self.event("RRULE:FREQ=DAILY;COUNT"))
+        errors = validate(root)
+        self.assertTrue(any("'='" in e.message for e in errors))
+
+    def test_empty_rrule_is_reported(self):
+        root = parse_document(self.event("RRULE:"))
+        errors = validate(root)
+        self.assertTrue(any("RRULE" in e.message and "empty" in e.message for e in errors))
+
+    def test_error_position_points_at_bad_value(self):
+        text = self.event("RRULE:FREQ=DAILY;COUNT=abc")
+        root = parse_document(text)
+        errors = validate(root)
+        err = next(e for e in errors if "COUNT" in e.message)
+        self.assertEqual(err.pos, Pos(8, 24))
+
+
 if __name__ == "__main__":
     unittest.main()

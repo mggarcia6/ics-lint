@@ -75,9 +75,13 @@ has a colon somewhere, and points at the exact spot where it expected one.
   `DTSTAMP`, `CREATED`, and `LAST-MODIFIED` are checked as UTC `DATE-TIME`
   values, since RFC 5545 doesn't let those vary. `EXDATE` and `RDATE`
   values are checked item-by-item when comma-separated.
+- `RRULE` syntax (RFC 5545 3.3.10): every part must be a recognized
+  `NAME=VALUE` pair (or an `X-` extension), `FREQ` is required and must be
+  one of the eight defined frequencies, `COUNT` and `INTERVAL` must be
+  positive integers, `UNTIL` must be a valid `DATE` or UTC `DATE-TIME`, and
+  `UNTIL`/`COUNT` may not both appear on the same rule.
 
-`RRULE` syntax and timezone reference checks are not implemented yet -- see
-the roadmap below.
+Timezone reference checks are not implemented yet -- see the roadmap below.
 
 ## Why no dependencies
 
