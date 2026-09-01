@@ -232,6 +232,50 @@ class ValidateTests(unittest.TestCase):
         root = parse_document(text)
         self.assertEqual(validate(root), [])
 
+    def test_duplicate_uid_across_vevents_is_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:same@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+            "END:VEVENT\n"
+            "BEGIN:VEVENT\n"
+            "UID:same@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260103T090000Z\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        dup_errors = [e for e in errors if "already used" in e.message]
+        self.assertEqual(len(dup_errors), 1)
+        self.assertIn("same@example.com", dup_errors[0].message)
+        self.assertEqual(dup_errors[0].pos, Pos(10, 1))
+
+    def test_distinct_uids_are_not_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:one@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+            "END:VEVENT\n"
+            "BEGIN:VEVENT\n"
+            "UID:two@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260103T090000Z\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        self.assertEqual(validate(root), [])
+
 
 class DateValueValidationTests(unittest.TestCase):
     def event(self, dtstart_line):

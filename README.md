@@ -68,6 +68,8 @@ has a colon somewhere, and points at the exact spot where it expected one.
 - Exactly one top-level `BEGIN:VCALENDAR` block.
 - Required properties: `VERSION` and `PRODID` on `VCALENDAR`, `UID`,
   `DTSTAMP`, and `DTSTART` on every `VEVENT`.
+- Duplicate `UID`s across `VEVENT`s in the same file, reported at the
+  duplicate with a pointer back to the `VEVENT` that used it first.
 - `DATE`/`DATE-TIME` value formats: `DTSTART`, `DTEND`, `DUE`,
   `RECURRENCE-ID`, and `EXDATE` are checked against their `VALUE` parameter
   (`DATE` or `DATE-TIME`, defaulting to `DATE-TIME`), including that the

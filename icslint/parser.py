@@ -447,6 +447,7 @@ def validate(root):
                 IcsError(f"VCALENDAR is missing the required {required} property", vcalendar.pos)
             )
 
+    seen_uids = {}  # UID value -> Pos of the VEVENT that first used it
     for child in vcalendar.children:
         if isinstance(child, Component) and child.name == "VEVENT":
             event_props = {p.name.upper() for p in child.children if isinstance(p, Property)}
@@ -455,6 +456,22 @@ def validate(root):
                     errors.append(
                         IcsError(f"VEVENT is missing the required {required} property", child.pos)
                     )
+
+            uid_prop = next(
+                (p for p in child.children if isinstance(p, Property) and p.name.upper() == "UID"),
+                None,
+            )
+            if uid_prop is not None:
+                first_pos = seen_uids.get(uid_prop.value)
+                if first_pos is not None:
+                    errors.append(
+                        IcsError(
+                            f"UID {uid_prop.value!r} is already used by the VEVENT at {first_pos}",
+                            uid_prop.pos,
+                        )
+                    )
+                else:
+                    seen_uids[uid_prop.value] = uid_prop.pos
 
     for prop in _iter_properties(vcalendar):
         _check_date_value_property(prop, errors)
