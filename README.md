@@ -24,6 +24,12 @@ or, after installing (`pip install -e .`), just:
 icslint path/to/calendar.ics
 ```
 
+Pass `-`, or nothing at all, to read from stdin instead of a file:
+
+```
+cat path/to/calendar.ics | icslint
+```
+
 Exit code is `0` if the file is well-formed, `1` if it has errors, `2` if
 the path couldn't be read.
 

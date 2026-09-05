@@ -18,24 +18,29 @@ def format_error(err, filename, physical_lines):
 
 
 def lint_file(path):
-    try:
-        with open(path, "r", newline="", encoding="utf-8", errors="replace") as f:
-            text = f.read()
-    except OSError as err:
-        print(f"icslint: {path}: {err.strerror}", file=sys.stderr)
-        return 2
+    if path == "-":
+        text = sys.stdin.read()
+        display_name = "<stdin>"
+    else:
+        try:
+            with open(path, "r", newline="", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError as err:
+            print(f"icslint: {path}: {err.strerror}", file=sys.stderr)
+            return 2
+        display_name = path
 
     physical_lines = split_physical_lines(text)
 
     try:
         root = parse_document(text)
     except IcsError as err:
-        print(format_error(err, path, physical_lines), file=sys.stderr)
+        print(format_error(err, display_name, physical_lines), file=sys.stderr)
         return 1
 
     errors = validate(root)
     for err in errors:
-        print(format_error(err, path, physical_lines), file=sys.stderr)
+        print(format_error(err, display_name, physical_lines), file=sys.stderr)
     return 1 if errors else 0
 
 
@@ -44,7 +49,12 @@ def main(argv=None):
         prog="icslint",
         description="Check an .ics (iCalendar) file for structural errors.",
     )
-    parser.add_argument("path", help="path to an .ics file")
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default="-",
+        help="path to an .ics file, or '-' (the default) to read from stdin",
+    )
     args = parser.parse_args(argv)
     return lint_file(args.path)
 
