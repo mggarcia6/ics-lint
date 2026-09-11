@@ -4,6 +4,7 @@ from icslint.parser import (
     IcsError,
     Pos,
     Property,
+    check_line_lengths,
     parse_content_line,
     parse_document,
     split_physical_lines,
@@ -489,6 +490,61 @@ class RRuleValidationTests(unittest.TestCase):
         errors = validate(root)
         err = next(e for e in errors if "COUNT" in e.message)
         self.assertEqual(err.pos, Pos(8, 24))
+
+
+class StrictCheckTests(unittest.TestCase):
+    def event(self, extra_line=""):
+        lines = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            "DTSTART:20260102T090000Z\n"
+        )
+        if extra_line:
+            lines += extra_line + "\n"
+        lines += "END:VEVENT\nEND:VCALENDAR\n"
+        return lines
+
+    def test_line_within_limit_is_not_reported(self):
+        self.assertEqual(check_line_lengths("SUMMARY:short line\n"), [])
+
+    def test_line_over_75_octets_is_reported(self):
+        text = "SUMMARY:" + ("x" * 70) + "\n"
+        errors = check_line_lengths(text)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("75 octets", errors[0].message)
+        self.assertEqual(errors[0].pos.line, 1)
+
+    def test_multibyte_line_counted_in_octets_not_characters(self):
+        # "é" is 2 bytes in UTF-8, so 40 of them plus the 8-byte prefix is
+        # 88 octets even though the line is only 48 characters long.
+        text = "SUMMARY:" + ("é" * 40) + "\n"
+        errors = check_line_lengths(text)
+        self.assertEqual(len(errors), 1)
+
+    def test_folded_continuation_lines_are_checked_individually(self):
+        # a long logical value that is properly folded should not trip this
+        # check, since each physical line stays under the limit.
+        text = "SUMMARY:short\n continuation also short\n"
+        self.assertEqual(check_line_lengths(text), [])
+
+    def test_non_strict_validate_ignores_bad_version(self):
+        text = self.event().replace("VERSION:2.0", "VERSION:1.0")
+        root = parse_document(text)
+        self.assertEqual(validate(root, strict=False), [])
+
+    def test_strict_validate_reports_bad_version(self):
+        text = self.event().replace("VERSION:2.0", "VERSION:1.0")
+        root = parse_document(text)
+        errors = validate(root, strict=True)
+        self.assertTrue(any("VERSION" in e.message for e in errors))
+
+    def test_strict_validate_accepts_correct_version(self):
+        root = parse_document(self.event())
+        self.assertEqual(validate(root, strict=True), [])
 
 
 if __name__ == "__main__":

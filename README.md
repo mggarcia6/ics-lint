@@ -30,6 +30,13 @@ Pass `-`, or nothing at all, to read from stdin instead of a file:
 cat path/to/calendar.ics | icslint
 ```
 
+Pass `--strict` to also run pedantic checks that flag things RFC 5545
+discourages without making the file unreadable: content lines longer than
+75 octets (3.1) that a well-behaved writer would have folded, and a
+`VERSION` value other than `2.0` (3.7.4, the only value the RFC defines).
+These are off by default because plenty of calendars in the wild violate
+them harmlessly.
+
 Exit code is `0` if the file is well-formed, `1` if it has errors, `2` if
 the path couldn't be read.
 
@@ -90,6 +97,11 @@ has a colon somewhere, and points at the exact spot where it expected one.
   `UNTIL`/`COUNT` may not both appear on the same rule.
 
 Timezone reference checks are not implemented yet -- see the roadmap below.
+
+With `--strict`:
+
+- Content lines over 75 octets that should have been folded.
+- `VERSION` values other than `2.0`.
 
 ## Why no dependencies
 

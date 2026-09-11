@@ -422,10 +422,51 @@ def _check_rrule_property(prop, errors):
             )
 
 
-def validate(root):
+# RFC 5545 3.1: a content line should be folded before it reaches this many
+# octets, not counting the line break itself.
+MAX_LINE_OCTETS = 75
+
+
+def check_line_lengths(text):
+    """Pedantic (--strict) check for RFC 5545 3.1 line folding: flag any
+    physical line whose octet length (not character length -- a line full of
+    multi-byte characters can be short in characters and still too long in
+    octets) exceeds MAX_LINE_OCTETS. This never trips on files this parser
+    would otherwise reject, so it's opt-in rather than a default error."""
+    errors = []
+    for line_no, raw in enumerate(split_physical_lines(text), start=1):
+        octets = len(raw.encode("utf-8"))
+        if octets > MAX_LINE_OCTETS:
+            column = min(MAX_LINE_OCTETS + 1, len(raw) + 1)
+            errors.append(
+                IcsError(
+                    f"line is {octets} octets long; RFC 5545 recommends folding "
+                    f"before {MAX_LINE_OCTETS} octets",
+                    Pos(line_no, column),
+                )
+            )
+    return errors
+
+
+def _check_strict_version(vcalendar, errors):
+    """RFC 5545 3.7.4 defines a single value for VERSION: '2.0'. Not folding
+    this into the default checks because a calendar with a different (or
+    future) version string still parses and structurally validates fine."""
+    for child in vcalendar.children:
+        if isinstance(child, Property) and child.name.upper() == "VERSION":
+            if child.value != "2.0":
+                errors.append(
+                    IcsError(f"VERSION should be exactly '2.0', found {child.value!r}", child.pos)
+                )
+
+
+def validate(root, strict=False):
     """Check the structural rules a calendar file must follow beyond bare
     syntax. Returns a list of IcsError rather than raising, so a caller can
     report every problem found instead of stopping at the first one.
+
+    With strict=True, also runs pedantic checks that flag things RFC 5545
+    frowns on without making the file unreadable.
     """
     errors = []
     top_level = [c for c in root.children if isinstance(c, Component)]
@@ -446,6 +487,9 @@ def validate(root):
             errors.append(
                 IcsError(f"VCALENDAR is missing the required {required} property", vcalendar.pos)
             )
+
+    if strict:
+        _check_strict_version(vcalendar, errors)
 
     seen_uids = {}  # UID value -> Pos of the VEVENT that first used it
     for child in vcalendar.children:

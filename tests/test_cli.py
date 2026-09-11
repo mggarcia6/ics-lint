@@ -36,5 +36,30 @@ class LintFileStdinTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+class StrictModeTests(unittest.TestCase):
+    def test_valid_document_passes_strict_too(self):
+        with mock.patch("sys.stdin", io.StringIO(VALID_DOCUMENT)):
+            code = lint_file("-", strict=True)
+        self.assertEqual(code, 0)
+
+    def test_non_strict_mode_ignores_line_length(self):
+        text = VALID_DOCUMENT.replace(
+            "END:VEVENT\n", f"DESCRIPTION:{'x' * 80}\nEND:VEVENT\n"
+        )
+        with mock.patch("sys.stdin", io.StringIO(text)):
+            code = lint_file("-", strict=False)
+        self.assertEqual(code, 0)
+
+    def test_strict_mode_reports_long_line(self):
+        text = VALID_DOCUMENT.replace(
+            "END:VEVENT\n", f"DESCRIPTION:{'x' * 80}\nEND:VEVENT\n"
+        )
+        with mock.patch("sys.stdin", io.StringIO(text)):
+            with mock.patch("sys.stderr", io.StringIO()) as stderr:
+                code = lint_file("-", strict=True)
+        self.assertEqual(code, 1)
+        self.assertIn("octets", stderr.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

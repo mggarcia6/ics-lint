@@ -3,7 +3,13 @@
 import argparse
 import sys
 
-from .parser import IcsError, parse_document, split_physical_lines, validate
+from .parser import (
+    IcsError,
+    check_line_lengths,
+    parse_document,
+    split_physical_lines,
+    validate,
+)
 
 
 def format_error(err, filename, physical_lines):
@@ -17,7 +23,7 @@ def format_error(err, filename, physical_lines):
     return header
 
 
-def lint_file(path):
+def lint_file(path, strict=False):
     if path == "-":
         text = sys.stdin.read()
         display_name = "<stdin>"
@@ -38,7 +44,9 @@ def lint_file(path):
         print(format_error(err, display_name, physical_lines), file=sys.stderr)
         return 1
 
-    errors = validate(root)
+    errors = validate(root, strict=strict)
+    if strict:
+        errors = errors + check_line_lengths(text)
     for err in errors:
         print(format_error(err, display_name, physical_lines), file=sys.stderr)
     return 1 if errors else 0
@@ -55,8 +63,13 @@ def main(argv=None):
         default="-",
         help="path to an .ics file, or '-' (the default) to read from stdin",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="also run pedantic RFC 5545 checks (line folding length, VERSION value)",
+    )
     args = parser.parse_args(argv)
-    return lint_file(args.path)
+    return lint_file(args.path, strict=args.strict)
 
 
 if __name__ == "__main__":
