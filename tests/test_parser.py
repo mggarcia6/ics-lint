@@ -492,6 +492,81 @@ class RRuleValidationTests(unittest.TestCase):
         self.assertEqual(err.pos, Pos(8, 24))
 
 
+class TimezoneValidationTests(unittest.TestCase):
+    def event(self, dtstart_line):
+        return (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VTIMEZONE\n"
+            "TZID:America/New_York\n"
+            "END:VTIMEZONE\n"
+            "BEGIN:VEVENT\n"
+            "UID:1@example.com\n"
+            "DTSTAMP:20260101T090000Z\n"
+            f"{dtstart_line}\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n"
+        )
+
+    def test_tzid_matching_defined_vtimezone_is_accepted(self):
+        root = parse_document(self.event("DTSTART;TZID=America/New_York:20260102T090000"))
+        self.assertEqual(validate(root), [])
+
+    def test_tzid_with_no_matching_vtimezone_is_reported(self):
+        root = parse_document(self.event("DTSTART;TZID=Europe/Paris:20260102T090000"))
+        errors = validate(root)
+        self.assertTrue(any("TZID=Europe/Paris" in e.message for e in errors))
+
+    def test_tzid_is_case_sensitive(self):
+        root = parse_document(self.event("DTSTART;TZID=america/new_york:20260102T090000"))
+        errors = validate(root)
+        self.assertTrue(any("TZID=america/new_york" in e.message for e in errors))
+
+    def test_globally_unique_tzid_is_not_checked_against_vtimezone(self):
+        root = parse_document(self.event("DTSTART;TZID=/freeassociation.sourceforge.net/Etc/UTC:20260102T090000"))
+        self.assertEqual(validate(root), [])
+
+    def test_tzid_combined_with_utc_value_is_reported(self):
+        root = parse_document(self.event("DTSTART;TZID=America/New_York:20260102T090000Z"))
+        errors = validate(root)
+        self.assertTrue(any("TZID" in e.message and "UTC" in e.message for e in errors))
+
+    def test_vtimezone_missing_tzid_is_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VTIMEZONE\n"
+            "END:VTIMEZONE\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        self.assertTrue(any("VTIMEZONE" in e.message and "TZID" in e.message for e in errors))
+
+    def test_duplicate_vtimezone_tzid_is_reported(self):
+        text = (
+            "BEGIN:VCALENDAR\n"
+            "VERSION:2.0\n"
+            "PRODID:-//test//icslint//EN\n"
+            "BEGIN:VTIMEZONE\n"
+            "TZID:America/New_York\n"
+            "END:VTIMEZONE\n"
+            "BEGIN:VTIMEZONE\n"
+            "TZID:America/New_York\n"
+            "END:VTIMEZONE\n"
+            "END:VCALENDAR\n"
+        )
+        root = parse_document(text)
+        errors = validate(root)
+        self.assertTrue(any("already defined" in e.message for e in errors))
+
+    def test_no_tzid_parameter_is_not_checked(self):
+        root = parse_document(self.event("DTSTART:20260102T090000"))
+        self.assertEqual(validate(root), [])
+
+
 class StrictCheckTests(unittest.TestCase):
     def event(self, extra_line=""):
         lines = (

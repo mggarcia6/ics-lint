@@ -95,8 +95,12 @@ has a colon somewhere, and points at the exact spot where it expected one.
   one of the eight defined frequencies, `COUNT` and `INTERVAL` must be
   positive integers, `UNTIL` must be a valid `DATE` or UTC `DATE-TIME`, and
   `UNTIL`/`COUNT` may not both appear on the same rule.
-
-Timezone reference checks are not implemented yet -- see the roadmap below.
+- Timezone references (RFC 5545 3.6.5, 3.2.19): every `VTIMEZONE` must have
+  a `TZID`, two `VTIMEZONE`s can't declare the same one, and every `TZID`
+  parameter used elsewhere in the file (`DTSTART;TZID=...`, and so on) must
+  name a `VTIMEZONE` actually defined in that file. A globally unique TZID
+  (one starting with `/`) is exempt, since by definition it isn't defined
+  locally. A value already in UTC (trailing `Z`) can't also carry a `TZID`.
 
 With `--strict`:
 

@@ -272,6 +272,17 @@ def _param_value(params, name):
     return result
 
 
+def _param_raw_value(params, name):
+    """Like _param_value, but keeps the original case. TZID values are
+    case-sensitive (e.g. an IANA zone name like 'America/New_York'), so
+    upper-casing them would break the comparison against VTIMEZONE."""
+    result = None
+    for pname, pvalues in params:
+        if pname.upper() == name and pvalues:
+            result = pvalues[0]
+    return result
+
+
 def _iter_properties(component):
     for child in component.children:
         if isinstance(child, Property):
@@ -422,6 +433,59 @@ def _check_rrule_property(prop, errors):
             )
 
 
+def _check_timezones(vcalendar, errors):
+    """RFC 5545 3.6.5 and 3.2.19: every VTIMEZONE must declare a TZID, no two
+    VTIMEZONEs may declare the same one, and every TZID parameter used
+    elsewhere in the file must name a VTIMEZONE that's actually defined
+    here. A value already in UTC (trailing 'Z') must not also carry a
+    TZID -- the two ways of pinning down a time zone would conflict."""
+    tzids = {}  # TZID value -> Pos of the VTIMEZONE that first declared it
+    for child in vcalendar.children:
+        if not (isinstance(child, Component) and child.name == "VTIMEZONE"):
+            continue
+        tzid_prop = next(
+            (p for p in child.children if isinstance(p, Property) and p.name.upper() == "TZID"),
+            None,
+        )
+        if tzid_prop is None:
+            errors.append(IcsError("VTIMEZONE is missing the required TZID property", child.pos))
+            continue
+        existing = tzids.get(tzid_prop.value)
+        if existing is not None:
+            errors.append(
+                IcsError(
+                    f"VTIMEZONE TZID {tzid_prop.value!r} is already defined at {existing}",
+                    tzid_prop.pos,
+                )
+            )
+        else:
+            tzids[tzid_prop.value] = tzid_prop.pos
+
+    for prop in _iter_properties(vcalendar):
+        if prop.name.upper() == "TZID":
+            continue  # the VTIMEZONE's own TZID property, not a reference to one
+        tzid_ref = _param_raw_value(prop.params, "TZID")
+        if tzid_ref is None:
+            continue
+        if prop.value.upper().endswith("Z"):
+            errors.append(
+                IcsError(
+                    f"{prop.name.upper()} has both a TZID parameter and a UTC value "
+                    "(trailing 'Z'); a UTC value must not also carry a TZID",
+                    prop.pos,
+                )
+            )
+        elif tzid_ref.startswith("/"):
+            continue  # a globally unique TZID (RFC 5545 3.2.19); not defined locally
+        elif tzid_ref not in tzids:
+            errors.append(
+                IcsError(
+                    f"TZID={tzid_ref} does not match any VTIMEZONE defined in this file",
+                    prop.pos,
+                )
+            )
+
+
 # RFC 5545 3.1: a content line should be folded before it reaches this many
 # octets, not counting the line break itself.
 MAX_LINE_OCTETS = 75
@@ -516,6 +580,8 @@ def validate(root, strict=False):
                     )
                 else:
                     seen_uids[uid_prop.value] = uid_prop.pos
+
+    _check_timezones(vcalendar, errors)
 
     for prop in _iter_properties(vcalendar):
         _check_date_value_property(prop, errors)
