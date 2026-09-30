@@ -524,6 +524,61 @@ def _check_strict_version(vcalendar, errors):
                 )
 
 
+# Property names registered with IANA for iCalendar: RFC 5545 3.8, plus the
+# additions from RFC 7986, RFC 9073 and RFC 9074 that show up in real files.
+KNOWN_PROPERTY_NAMES = {
+    "CALSCALE", "METHOD", "PRODID", "VERSION", "ATTACH", "CATEGORIES", "CLASS",
+    "COMMENT", "DESCRIPTION", "GEO", "LOCATION", "PERCENT-COMPLETE", "PRIORITY",
+    "RESOURCES", "STATUS", "SUMMARY", "COMPLETED", "DTEND", "DUE", "DTSTART",
+    "DURATION", "FREEBUSY", "TRANSP", "TZID", "TZNAME", "TZOFFSETFROM",
+    "TZOFFSETTO", "TZURL", "ATTENDEE", "CONTACT", "ORGANIZER", "RECURRENCE-ID",
+    "RELATED-TO", "URL", "UID", "EXDATE", "RDATE", "RRULE", "ACTION", "REPEAT",
+    "TRIGGER", "CREATED", "DTSTAMP", "LAST-MODIFIED", "SEQUENCE", "REQUEST-STATUS",
+    "NAME", "REFRESH-INTERVAL", "SOURCE", "COLOR", "IMAGE", "CONFERENCE",
+    "LOCATION-TYPE", "PARTICIPANT-TYPE", "RESOURCE-TYPE", "CALENDAR-ADDRESS",
+    "STYLED-DESCRIPTION", "STRUCTURED-DATA", "STRUCTURED-LOCATION", "PROXIMITY",
+    "ACKNOWLEDGED", "EXRULE",
+}
+
+# Parameter names from RFC 5545 3.2, RFC 6638, RFC 7986 and RFC 9073.
+KNOWN_PARAMETER_NAMES = {
+    "ALTREP", "CN", "CUTYPE", "DELEGATED-FROM", "DELEGATED-TO", "DIR", "ENCODING",
+    "FMTTYPE", "FBTYPE", "LANGUAGE", "MEMBER", "PARTSTAT", "RANGE", "RELATED",
+    "RELTYPE", "ROLE", "RSVP", "SENT-BY", "TZID", "VALUE", "DISPLAY", "EMAIL",
+    "FEATURE", "LABEL", "SCHEDULE-AGENT", "SCHEDULE-STATUS", "SCHEDULE-FORCE-SEND",
+    "ORDER", "SCHEMA", "DERIVED",
+}
+
+
+def _is_extension_name(name):
+    return name.upper().startswith("X-")
+
+
+def _check_strict_names(vcalendar, errors):
+    """RFC 5545 3.6 and 3.2 only allow registered (IANA) names or names
+    beginning with 'X-'. A name that is neither is usually a typo such as
+    DTSTRAT, which a consumer will silently ignore, so it's worth flagging
+    even though the file still parses."""
+    for prop in _iter_properties(vcalendar):
+        upper_name = prop.name.upper()
+        if upper_name not in KNOWN_PROPERTY_NAMES and not _is_extension_name(upper_name):
+            errors.append(
+                IcsError(
+                    f"property name {prop.name!r} is neither registered with IANA nor an 'X-' extension",
+                    prop.pos,
+                )
+            )
+        for pname, _ in prop.params:
+            if pname.upper() not in KNOWN_PARAMETER_NAMES and not _is_extension_name(pname):
+                errors.append(
+                    IcsError(
+                        f"parameter name {pname!r} on {upper_name} is neither registered with "
+                        "IANA nor an 'X-' extension",
+                        prop.pos,
+                    )
+                )
+
+
 def validate(root, strict=False):
     """Check the structural rules a calendar file must follow beyond bare
     syntax. Returns a list of IcsError rather than raising, so a caller can
@@ -554,6 +609,7 @@ def validate(root, strict=False):
 
     if strict:
         _check_strict_version(vcalendar, errors)
+        _check_strict_names(vcalendar, errors)
 
     seen_uids = {}  # UID value -> Pos of the VEVENT that first used it
     for child in vcalendar.children:

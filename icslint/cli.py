@@ -66,7 +66,7 @@ def main(argv=None):
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="also run pedantic RFC 5545 checks (line folding length, VERSION value)",
+        help="also run pedantic RFC 5545 checks (line folding length, VERSION value, unknown names)",
     )
     args = parser.parse_args(argv)
     return lint_file(args.path, strict=args.strict)

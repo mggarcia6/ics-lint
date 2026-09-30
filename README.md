@@ -33,7 +33,8 @@ cat path/to/calendar.ics | icslint
 Pass `--strict` to also run pedantic checks that flag things RFC 5545
 discourages without making the file unreadable: content lines longer than
 75 octets (3.1) that a well-behaved writer would have folded, and a
-`VERSION` value other than `2.0` (3.7.4, the only value the RFC defines).
+`VERSION` value other than `2.0` (3.7.4, the only value the RFC defines),
+and unregistered property or parameter names without an `X-` prefix.
 These are off by default because plenty of calendars in the wild violate
 them harmlessly.
 
@@ -106,6 +107,8 @@ With `--strict`:
 
 - Content lines over 75 octets that should have been folded.
 - `VERSION` values other than `2.0`.
+- Property and parameter names that are neither registered with IANA nor
+  an `X-` extension (typically a typo like `DTSTRAT`).
 
 ## Why no dependencies
 

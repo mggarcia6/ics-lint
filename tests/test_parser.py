@@ -621,6 +621,35 @@ class StrictCheckTests(unittest.TestCase):
         root = parse_document(self.event())
         self.assertEqual(validate(root, strict=True), [])
 
+    def test_strict_reports_unknown_property_name(self):
+        root = parse_document(self.event("DTSTRAT:20260102T090000Z"))
+        errors = validate(root, strict=True)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("DTSTRAT", errors[0].message)
+        self.assertEqual(errors[0].pos.line, 8)
+
+    def test_non_strict_ignores_unknown_property_name(self):
+        root = parse_document(self.event("DTSTRAT:20260102T090000Z"))
+        self.assertEqual(validate(root), [])
+
+    def test_strict_accepts_x_extension_property(self):
+        root = parse_document(self.event("X-WR-CALNAME:Work"))
+        self.assertEqual(validate(root, strict=True), [])
+
+    def test_strict_property_name_check_is_case_insensitive(self):
+        root = parse_document(self.event("summary:lowercase is fine"))
+        self.assertEqual(validate(root, strict=True), [])
+
+    def test_strict_reports_unknown_parameter_name(self):
+        root = parse_document(self.event("ATTENDEE;ROEL=CHAIR:mailto:a@example.com"))
+        errors = validate(root, strict=True)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("ROEL", errors[0].message)
+
+    def test_strict_accepts_x_extension_parameter(self):
+        root = parse_document(self.event("ATTENDEE;X-NUM-GUESTS=2:mailto:a@example.com"))
+        self.assertEqual(validate(root, strict=True), [])
+
 
 if __name__ == "__main__":
     unittest.main()
